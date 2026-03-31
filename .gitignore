@@ -1,0 +1,47 @@
+# OS / editor
+Thumbs.db
+.DS_Store
+.vs/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local OMX state
+.omx/
+
+# Test / diagnostic outputs
+*.log
+report*.json
+report*.csv
+
+# .NET / WPF build artifacts
+ui/bin/
+ui/obj/
+
+# CMake / native build artifacts
+**/build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Native binaries and intermediate outputs
+*.obj
+*.o
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.dll
+*.exe
+*.sys

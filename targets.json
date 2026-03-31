@@ -1,0 +1,138 @@
+[
+  {
+    "category": "developer",
+    "name": "GitHub Main",
+    "host": "github.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Main web UI"
+  },
+  {
+    "category": "developer",
+    "name": "GitHub Raw",
+    "host": "raw.githubusercontent.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Static/raw assets"
+  },
+  {
+    "category": "developer",
+    "name": "GitHub Pages Sample",
+    "host": "pages.github.com",
+    "port": 443,
+    "check": "tls",
+    "note": "GitHub Pages front door"
+  },
+  {
+    "category": "chat",
+    "name": "Discord",
+    "host": "discord.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Chat/login API"
+  },
+  {
+    "category": "riot",
+    "name": "Riot Games",
+    "host": "www.riotgames.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Publisher main site"
+  },
+  {
+    "category": "riot",
+    "name": "League of Legends",
+    "host": "www.leagueoflegends.com",
+    "port": 443,
+    "check": "tls",
+    "note": "LoL official site"
+  },
+  {
+    "category": "riot",
+    "name": "VALORANT",
+    "host": "playvalorant.com",
+    "port": 443,
+    "check": "tls",
+    "note": "VALORANT official site"
+  },
+  {
+    "category": "steam",
+    "name": "Steam Store",
+    "host": "store.steampowered.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Game store over HTTPS"
+  },
+  {
+    "category": "steam",
+    "name": "Steam Community",
+    "host": "steamcommunity.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Steam community site"
+  },
+  {
+    "category": "epic",
+    "name": "Epic Games Store",
+    "host": "store.epicgames.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Epic storefront"
+  },
+  {
+    "category": "blizzard",
+    "name": "Blizzard",
+    "host": "www.blizzard.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Blizzard main site"
+  },
+  {
+    "category": "blizzard",
+    "name": "Battle.net Shop",
+    "host": "shop.battle.net",
+    "port": 443,
+    "check": "tls",
+    "note": "Battle.net commerce"
+  },
+  {
+    "category": "nexon",
+    "name": "Nexon",
+    "host": "www.nexon.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Nexon main site"
+  },
+  {
+    "category": "nexon",
+    "name": "MapleStory Nexon",
+    "host": "maplestory.nexon.com",
+    "port": 443,
+    "check": "tls",
+    "note": "Nexon game service"
+  },
+  {
+    "category": "udp_infra",
+    "name": "Google DNS",
+    "host": "8.8.8.8",
+    "port": 53,
+    "check": "udp_dns",
+    "note": "UDP DNS query"
+  },
+  {
+    "category": "udp_infra",
+    "name": "Cloudflare DNS",
+    "host": "1.1.1.1",
+    "port": 53,
+    "check": "udp_dns",
+    "note": "UDP DNS query"
+  },
+  {
+    "category": "udp_infra",
+    "name": "Google STUN",
+    "host": "stun.l.google.com",
+    "port": 3478,
+    "check": "udp_stun",
+    "note": "UDP NAT traversal"
+  }
+]
