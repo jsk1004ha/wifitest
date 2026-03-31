@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <psapi.h>
+#include <chrono>
 
 Diverter::Diverter()
     : m_enableTcpSni(false),
@@ -168,6 +169,18 @@ void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WIN
             if (m_allowedFlows.count(flowKey) > 0) allowed = true;
         }
 
+        if (!allowed && tcp_header && payload_len >= 5 && addr->Outbound) {
+            unsigned char* p = (unsigned char*)payload;
+            if (p[0] == 0x16 && p[1] == 0x03) {
+                // Mitigation for Flow Tracker Race Condition:
+                // Fast python scripts or tools might send ClientHello so quickly that the async 
+                // FLOW event hasn't been cached yet. Yield for 2ms and re-check.
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                std::lock_guard<std::mutex> lock(m_flowMutex);
+                if (m_allowedFlows.count(flowKey) > 0) allowed = true;
+            }
+        }
+
         if (!allowed) {
             // Unrecognized flow, just inject it untouched and bypass modifications
             WinDivertSend(m_hDevice, packet, packet_len, NULL, addr);
@@ -194,9 +207,6 @@ void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WIN
             if (ip1) ip1->Length = htons(ntohs(ip1->Length) - payload_len + split_pos);
             else if (ipv6_1) ipv6_1->Length = htons(ntohs(ipv6_1->Length) - payload_len + split_pos);
             
-            WinDivertHelperCalcChecksums(packet1.data(), first_packet_len, addr, 0);
-            WinDivertSend(m_hDevice, packet1.data(), first_packet_len, NULL, addr);
-            
             std::vector<unsigned char> packet2(0xFFFF);
             memcpy(packet2.data(), packet, hdr_len);
             memcpy(packet2.data() + hdr_len, p + split_pos, second_payload_len);
@@ -215,8 +225,13 @@ void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WIN
             
             tcp2->SeqNum = htonl(ntohl(tcp2->SeqNum) + split_pos);
             
+            // Out-of-Order (OOO) Injection: Send the second fragment FIRST!
             WinDivertHelperCalcChecksums(packet2.data(), second_packet_len, addr, 0);
             WinDivertSend(m_hDevice, packet2.data(), second_packet_len, NULL, addr);
+            
+            // Then send the first fragment (TLS header)
+            WinDivertHelperCalcChecksums(packet1.data(), first_packet_len, addr, 0);
+            WinDivertSend(m_hDevice, packet1.data(), first_packet_len, NULL, addr);
             return; 
         }
     }
