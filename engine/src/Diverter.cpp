@@ -4,7 +4,12 @@
 #include <algorithm>
 #include <psapi.h>
 
-Diverter::Diverter() : m_hDevice(INVALID_HANDLE_VALUE), m_hFlowDevice(INVALID_HANDLE_VALUE), m_running(false) {
+Diverter::Diverter()
+    : m_enableTcpSni(false),
+      m_enableUdpSpoofing(false),
+      m_hDevice(INVALID_HANDLE_VALUE),
+      m_hFlowDevice(INVALID_HANDLE_VALUE),
+      m_running(false) {
 }
 
 Diverter::~Diverter() {
@@ -87,12 +92,12 @@ void Diverter::Stop() {
 }
 
 void Diverter::FlowWorkerThread() {
-    unsigned char packet[0xFFFF];
+    std::vector<unsigned char> packet(0xFFFF);
     unsigned int packet_len;
     WINDIVERT_ADDRESS addr;
 
     while (m_running) {
-        if (!WinDivertRecv(m_hFlowDevice, packet, sizeof(packet), &packet_len, &addr)) {
+        if (!WinDivertRecv(m_hFlowDevice, packet.data(), static_cast<unsigned int>(packet.size()), &packet_len, &addr)) {
             continue;
         }
 
@@ -115,27 +120,30 @@ void Diverter::FlowWorkerThread() {
 }
 
 void Diverter::WorkerThread() {
-    unsigned char packet[0xFFFF];
+    std::vector<unsigned char> packet(0xFFFF);
     unsigned int packet_len;
     WINDIVERT_ADDRESS addr;
 
     while (m_running) {
-        if (!WinDivertRecv(m_hDevice, packet, sizeof(packet), &packet_len, &addr)) {
+        if (!WinDivertRecv(m_hDevice, packet.data(), static_cast<unsigned int>(packet.size()), &packet_len, &addr)) {
             continue;
         }
-        ProcessPacket(packet, packet_len, &addr);
+        ProcessPacket(packet.data(), packet_len, &addr);
     }
 }
 
 void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WINDIVERT_ADDRESS* addr) {
-    PWINDIVERT_IPHDR ip_header;
-    PWINDIVERT_IPV6HDR ipv6_header;
-    PWINDIVERT_TCPHDR tcp_header;
-    PWINDIVERT_UDPHDR udp_header;
-    PVOID payload;
-    UINT payload_len;
+    PWINDIVERT_IPHDR ip_header = nullptr;
+    PWINDIVERT_IPV6HDR ipv6_header = nullptr;
+    PWINDIVERT_TCPHDR tcp_header = nullptr;
+    PWINDIVERT_UDPHDR udp_header = nullptr;
+    PVOID payload = nullptr;
+    UINT payload_len = 0;
 
-    WinDivertHelperParsePacket(packet, packet_len, &ip_header, &ipv6_header, NULL, NULL, NULL, &tcp_header, &udp_header, &payload, &payload_len, NULL, NULL);
+    if (!WinDivertHelperParsePacket(packet, packet_len, &ip_header, &ipv6_header, NULL, NULL, NULL, &tcp_header, &udp_header, &payload, &payload_len, NULL, NULL)) {
+        WinDivertSend(m_hDevice, packet, packet_len, NULL, addr);
+        return;
+    }
 
     // Filter validation check if whitelist is not empty
     if (!m_allowedProcesses.empty()) {
@@ -170,29 +178,32 @@ void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WIN
     if (tcp_header != NULL && m_enableTcpSni && payload_len > 5 && addr->Outbound) {
         unsigned char* p = (unsigned char*)payload;
         if (p[0] == 0x16 && p[1] == 0x03 && (p[2] == 0x01 || p[2] == 0x03)) {
-            unsigned int split_pos = 5;
-            unsigned int hdr_len = (unsigned char*)payload - packet;
+            const unsigned int split_pos = 5;
+            const unsigned int hdr_len = static_cast<unsigned int>(p - packet);
+            const unsigned int first_packet_len = hdr_len + split_pos;
+            const unsigned int second_payload_len = payload_len - split_pos;
+            const unsigned int second_packet_len = hdr_len + second_payload_len;
             
-            unsigned char packet1[0xFFFF];
-            memcpy(packet1, packet, hdr_len);
-            memcpy(packet1 + hdr_len, p, split_pos);
+            std::vector<unsigned char> packet1(0xFFFF);
+            memcpy(packet1.data(), packet, hdr_len);
+            memcpy(packet1.data() + hdr_len, p, split_pos);
             
-            PWINDIVERT_IPHDR ip1 = ip_header ? (PWINDIVERT_IPHDR)(packet1 + ((unsigned char*)ip_header - packet)) : NULL;
-            PWINDIVERT_IPV6HDR ipv6_1 = ipv6_header ? (PWINDIVERT_IPV6HDR)(packet1 + ((unsigned char*)ipv6_header - packet)) : NULL;
+            PWINDIVERT_IPHDR ip1 = ip_header ? (PWINDIVERT_IPHDR)(packet1.data() + ((unsigned char*)ip_header - packet)) : NULL;
+            PWINDIVERT_IPV6HDR ipv6_1 = ipv6_header ? (PWINDIVERT_IPV6HDR)(packet1.data() + ((unsigned char*)ipv6_header - packet)) : NULL;
             
             if (ip1) ip1->Length = htons(ntohs(ip1->Length) - payload_len + split_pos);
             else if (ipv6_1) ipv6_1->Length = htons(ntohs(ipv6_1->Length) - payload_len + split_pos);
             
-            WinDivertHelperCalcChecksums(packet1, hdr_len + split_pos, addr, 0);
-            WinDivertSend(m_hDevice, packet1, hdr_len + split_pos, NULL, addr);
+            WinDivertHelperCalcChecksums(packet1.data(), first_packet_len, addr, 0);
+            WinDivertSend(m_hDevice, packet1.data(), first_packet_len, NULL, addr);
             
-            unsigned char packet2[0xFFFF];
-            memcpy(packet2, packet, hdr_len);
-            memcpy(packet2 + hdr_len, p + split_pos, payload_len - split_pos);
+            std::vector<unsigned char> packet2(0xFFFF);
+            memcpy(packet2.data(), packet, hdr_len);
+            memcpy(packet2.data() + hdr_len, p + split_pos, second_payload_len);
             
-            PWINDIVERT_IPHDR ip2 = ip_header ? (PWINDIVERT_IPHDR)(packet2 + ((unsigned char*)ip_header - packet)) : NULL;
-            PWINDIVERT_IPV6HDR ipv6_2 = ipv6_header ? (PWINDIVERT_IPV6HDR)(packet2 + ((unsigned char*)ipv6_header - packet)) : NULL;
-            PWINDIVERT_TCPHDR tcp2 = (PWINDIVERT_TCPHDR)(packet2 + ((unsigned char*)tcp_header - packet));
+            PWINDIVERT_IPHDR ip2 = ip_header ? (PWINDIVERT_IPHDR)(packet2.data() + ((unsigned char*)ip_header - packet)) : NULL;
+            PWINDIVERT_IPV6HDR ipv6_2 = ipv6_header ? (PWINDIVERT_IPV6HDR)(packet2.data() + ((unsigned char*)ipv6_header - packet)) : NULL;
+            PWINDIVERT_TCPHDR tcp2 = (PWINDIVERT_TCPHDR)(packet2.data() + ((unsigned char*)tcp_header - packet));
             
             if (ip2) {
                 ip2->Length = htons(ntohs(ip2->Length) - split_pos);
@@ -204,8 +215,8 @@ void Diverter::ProcessPacket(unsigned char* packet, unsigned int packet_len, WIN
             
             tcp2->SeqNum = htonl(ntohl(tcp2->SeqNum) + split_pos);
             
-            WinDivertHelperCalcChecksums(packet2, hdr_len + payload_len - split_pos, addr, 0);
-            WinDivertSend(m_hDevice, packet2, hdr_len + payload_len - split_pos, NULL, addr);
+            WinDivertHelperCalcChecksums(packet2.data(), second_packet_len, addr, 0);
+            WinDivertSend(m_hDevice, packet2.data(), second_packet_len, NULL, addr);
             return; 
         }
     }
